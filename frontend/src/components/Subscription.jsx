@@ -26,9 +26,11 @@ import {
 } from '@mui/material';
 import { Add, Edit, Delete, CleanHands } from '@mui/icons-material';
 import 'tailwindcss/tailwind.css';
+import {  useSnackbar } from 'notistack';
 
 
 const Subscription = () => {
+    const { enqueueSnackbar } = useSnackbar();
     const [subscriptions, setSubscriptions] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [products, setProducts] = useState([]);
@@ -91,7 +93,8 @@ const Subscription = () => {
     const fetchSubscriptions = async () => {
         const response = await axios.get('http://localhost:5000/subscriptions');
         setSubscriptions(response.data);
-        console.log(response.data);
+        
+       
     };
 
     const fetchCustomers = async () => {
@@ -106,43 +109,93 @@ const Subscription = () => {
 
     const handleAddSubscription = async (e) => {
         e.preventDefault();
+        
         if (!validateForm()) {
             return;
         }
-        await axios.post('http://localhost:5000/subscriptions', newSubscription)
         
-        
-        fetchSubscriptions();
-        setModalIsOpen(false);
+        try {
+            await axios.post('http://localhost:5000/subscriptions', newSubscription);
+            
+            setModalIsOpen(false);
+            enqueueSnackbar('Subscription added successfully', {
+                variant: 'success',
+                autoHideDuration: 5000,
+            });
+            fetchSubscriptions();
+            
+        } catch (error) {
+            
+            const errorMessage = error.response?.data?.message || 'An error occurred';
+    
+            enqueueSnackbar(errorMessage, {
+                variant: 'error',
+                autoHideDuration: 5000,
+            });
+        }
     };
 
     const handleExtendSubscription = async () => {
-        if (extendDate && extendPeriod){
-            alert('Please set either date or period')
+        if (extendDate && extendPeriod) {
+            enqueueSnackbar('Please set either date or period', {
+                variant: 'warning',
+                autoHideDuration: 5000,
+            });
             return;
         }
-        if (!extendDate && !extendPeriod){
-            alert('Please set before submitting')
+    
+        if (!extendDate && !extendPeriod) {
+            enqueueSnackbar('Please set before submitting', {
+                variant: 'warning',
+                autoHideDuration: 5000,
+            });
             return;
         }
-        await axios.put('http://localhost:5000/multiextend', { selectedSubscriptions, extendedbydate: extendDate, extendedbydays: extendPeriod});
-        setExtendDate("");
-        setExtendPeriod("");
-        setSelectedSubscriptions([]);
-        fetchSubscriptions();
-        setMultiExtendMode(false);
+    
+        try {
+            await axios.put('http://localhost:5000/multiextend', { 
+                selectedSubscriptions, 
+                extendedbydate: extendDate, 
+                extendedbydays: extendPeriod 
+            });
+            setExtendDate("");
+            setExtendPeriod("");
+            setSelectedSubscriptions([]);
+            fetchSubscriptions();
+            setMultiExtendMode(false);
+        } catch (error) {
+            const errorMessage = error.response?.data?.message || 'An error occurred';
+            enqueueSnackbar(errorMessage, {
+                variant: 'error',
+                autoHideDuration: 5000,
+            });
+        }
     };
+    
 
     const handleEndSubscription = async () => {
-        if (selectedSubscriptions.length==0){
-            alert('Please select at least one subscription')
+        if (selectedSubscriptions.length === 0) {
+            enqueueSnackbar('Please select at least one subscription', {
+                variant: 'warning',
+                autoHideDuration: 5000,
+            });
             return;
         }
-        await axios.put('http://localhost:5000/multiend', { selectedSubscriptions });
-        setSelectedSubscriptions([]);
-        fetchSubscriptions();
-        setMultiEndMode(false);
+    
+        try {
+            await axios.put('http://localhost:5000/multiend', { selectedSubscriptions });
+            setSelectedSubscriptions([]);
+            fetchSubscriptions();
+            setMultiEndMode(false);
+        } catch (error) {
+            const errorMessage = error.response?.data?.message || 'An error occurred';
+            enqueueSnackbar(errorMessage, {
+                variant: 'error',
+                autoHideDuration: 5000,
+            });
+        }
     };
+    
 
     const handleSelectSubscription = (id) => {
         if (selectedSubscriptions.includes(id)) {
@@ -157,9 +210,9 @@ const Subscription = () => {
     };
 
     const handleSaveSubscription = async (subscription) => {
-        
+        subscription={...subscription,EndDate: new Date(subscription.EndDate)};
         await axios.put(`http://localhost:5000/subscriptions/extend/${subscription.SubID}`, { EndDate: subscription.EndDate }).catch(err => {alert(err);});
-        fetchSubscriptions();
+        fetchSubscriptions(); //not needed but to check if it's updated in db
         setEditMode(null);
     };
 
@@ -173,14 +226,44 @@ const Subscription = () => {
         (subscription.CustID && subscription.CustID.toLowerCase().includes(search.toLowerCase())) ||
         (subscription.ProdName && subscription.ProdName.toLowerCase().includes(search.toLowerCase())) || (subscription.Name && subscription.Name.toLowerCase().includes(search.toLowerCase()))
     );
-
+    
+    const handleDateChange = (subID, newDate) => {
+        
+        const updatedSubscriptions = subscriptions.map(sub => {
+            if (sub.SubID === subID) {
+                const startDate = new Date(sub.StartDate);
+                const endDate = new Date(newDate); 
+    
+                
+                if (startDate >= endDate) {
+                    enqueueSnackbar('Start date must be before end date.', {
+                        variant: 'error',
+                        autoHideDuration: 5000,
+                    });
+                    return sub; 
+                }
+                return { ...sub, EndDate: newDate };
+            }
+            return sub; 
+        });
+    
+       
+        setSubscriptions(updatedSubscriptions);
+    };
+    
+    const formatDate = (dateStr) => {
+        
+        const dateObj = new Date(dateStr);
+        
+        return dateObj.toISOString().split('T')[0];
+    };
     return (
         
         <div className="flex flex-col items-center p-4">
             
 
             <Typography variant="h4" className="mb-4 text-center">Subscriptions</Typography>
-
+            
             <div className="flex flex-col md:flex-row items-center justify-between mb-4 w-full max-w-4xl">
                 {!multiExtendMode && !multiEndMode && (
                     <>
@@ -236,6 +319,7 @@ const Subscription = () => {
                                 onChange={(e) => setExtendPeriod(e.target.value)}
                                 label="Period"
                             >
+                                <MenuItem value="">None</MenuItem>
                                 <MenuItem value={30}>30 days</MenuItem>
                                 <MenuItem value={90}>3 months</MenuItem>
                                 <MenuItem value={180}>6 months</MenuItem>
@@ -294,9 +378,8 @@ const Subscription = () => {
                                     {editMode === subscription.SubID ? (
                                         <TextField
                                             type="date"
-                                            value={subscription.EndDate}
-                                            onChange={(e) => setSubscriptions(subscriptions.map(sub => sub.SubID === subscription.SubID ? { ...sub, EndDate: e.target.value } : sub))}
-                                            
+                                            value={formatDate(subscription.EndDate)}
+                                            onChange={(e) => handleDateChange(subscription.SubID, e.target.value)}
                                         />
                                     ) : (
                                         subscription.EndDate
@@ -309,7 +392,9 @@ const Subscription = () => {
                                             <Button
                                                 variant="contained"
                                                 color="primary"
-                                                onClick={() => handleSaveSubscription(subscription)}
+                                                onClick={() => {
+                                                    handleSaveSubscription(subscription)
+                                                }}
                                             >
                                                 Done
                                             </Button>

@@ -29,7 +29,7 @@ class Subscription(Resource):
         cur = None
         try:
             cur = get_db_cursor()
-            cur.execute("SELECT * FROM SUBSCRIPTION, Customer WHERE Subscription.CustID = Customer.CustID")
+            cur.execute("SELECT Subscription.*, Customer.CustID, Customer.Name FROM Subscription JOIN Customer ON Subscription.CustID = Customer.CustID")
             subs = cur.fetchall()
             subs_with_fields = [dict(zip([column[0] for column in cur.description], row)) for row in subs]
             return jsonify(subs_with_fields)
